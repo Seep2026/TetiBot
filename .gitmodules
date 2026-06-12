@@ -1,0 +1,3 @@
+[submodule "engine/usagi"]
+	path = engine/usagi
+	url = https://github.com/Seep2026/usagi.git
