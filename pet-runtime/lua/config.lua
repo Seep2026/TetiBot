@@ -14,9 +14,20 @@ Config.desktop = {
   fallback_w = 1440,
   fallback_h = 900,
   margin = 24,
+  edge_margin = 0,
+  dock_margin = 78,
   start_x_ratio = 0.72,
-  start_y_ratio = 0.78,
-  move_speed = 72,
+  move_speed = 48,
+  move_speed_min = 34,
+  move_speed_max = 68,
+  walk_min_distance = 180,
+  walk_max_distance = 760,
+  long_walk_chance = 0.24,
+  idle_min_delay = 0.5,
+  idle_max_delay = 1.8,
+  turn_chance = 0.42,
+  fall_gravity = 900,
+  fall_max_speed = 520,
 }
 
 Config.breathing = {
@@ -65,7 +76,7 @@ Config.menu = {
 
 function Config.usagi()
   return {
-    name = "TetiBot Pet Prototype",
+    name = "Teti",
     game_id = "ai.seep.tetibot.prototype",
     game_width = Config.game_width,
     game_height = Config.game_height,
