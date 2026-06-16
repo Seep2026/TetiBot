@@ -1,4 +1,15 @@
+local Config = require("config")
+
 local Input = {}
+
+local DEBUG_EXPRESSIONS = {
+  { key = "KEY_1", expression = "neutral" },
+  { key = "KEY_2", expression = "blink" },
+  { key = "KEY_3", expression = "sleepy" },
+  { key = "KEY_4", expression = "focused" },
+  { key = "KEY_5", expression = "warning" },
+  { key = "KEY_6", expression = "collapsed" },
+}
 
 local function mouse_screen(mx, my)
   if input.mouse_screen then
@@ -16,10 +27,24 @@ end
 function Input.update(pet, menu, pet_module, menu_module)
   local mx, my = input.mouse()
   local sx, sy = mouse_screen(mx, my)
+  local hovered = pet_module.contains(pet, mx, my)
+
+  if pet_module.set_hover then
+    pet_module.set_hover(pet, hovered)
+  end
+
+  if Config.expression.debug_keys and input.key_pressed and pet_module.set_expression_debug then
+    for _, item in ipairs(DEBUG_EXPRESSIONS) do
+      local key = input[item.key]
+      if key and input.key_pressed(key) then
+        pet_module.set_expression_debug(pet, item.expression)
+      end
+    end
+  end
 
   if input.mouse_pressed(input.MOUSE_RIGHT) then
     pet_module.end_drag(pet)
-    if pet_module.contains(pet, mx, my) then
+    if hovered then
       menu_module.show(menu, mx, my)
     else
       menu_module.hide(menu)
@@ -32,7 +57,7 @@ function Input.update(pet, menu, pet_module, menu_module)
   end
 
   if input.mouse_pressed(input.MOUSE_LEFT) then
-    if pet_module.contains(pet, mx, my) then
+    if hovered then
       menu_module.hide(menu)
       pet_module.begin_drag(pet, mx, my, sx, sy)
     end

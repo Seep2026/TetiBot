@@ -10,6 +10,7 @@ with the system Python alone.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import struct
@@ -50,6 +51,37 @@ SHEET_ASSETS = [
     Asset("hat_sprout_128", "hats/hat_sprout_128.png"),
 ]
 
+TRACK_MOTION_ASSETS = [
+    Asset("idle_breathe_01_128", "motion/track/idle_breathe_01_128.png"),
+    Asset("idle_breathe_02_128", "motion/track/idle_breathe_02_128.png"),
+    Asset("idle_breathe_03_128", "motion/track/idle_breathe_03_128.png"),
+    Asset("idle_breathe_04_128", "motion/track/idle_breathe_04_128.png"),
+    Asset("move_left_01_128", "motion/track/move_left_01_128.png"),
+    Asset("move_left_02_128", "motion/track/move_left_02_128.png"),
+    Asset("move_left_03_128", "motion/track/move_left_03_128.png"),
+    Asset("move_left_04_128", "motion/track/move_left_04_128.png"),
+    Asset("move_left_05_128", "motion/track/move_left_05_128.png"),
+    Asset("move_left_06_128", "motion/track/move_left_06_128.png"),
+    Asset("move_right_01_128", "motion/track/move_right_01_128.png"),
+    Asset("move_right_02_128", "motion/track/move_right_02_128.png"),
+    Asset("move_right_03_128", "motion/track/move_right_03_128.png"),
+    Asset("move_right_04_128", "motion/track/move_right_04_128.png"),
+    Asset("move_right_05_128", "motion/track/move_right_05_128.png"),
+    Asset("move_right_06_128", "motion/track/move_right_06_128.png"),
+]
+
+FACE_OVERLAY_ASSETS = [
+    Asset("face_clear_128", "faces/overlays/face_clear_128.png"),
+    Asset("face_overlay_neutral_128", "faces/overlays/face_overlay_neutral_128.png"),
+    Asset("face_overlay_blink_128", "faces/overlays/face_overlay_blink_128.png"),
+    Asset("face_overlay_sleepy_128", "faces/overlays/face_overlay_sleepy_128.png"),
+    Asset("face_overlay_focused_128", "faces/overlays/face_overlay_focused_128.png"),
+    Asset("face_overlay_warning_128", "faces/overlays/face_overlay_warning_128.png"),
+    Asset("face_overlay_collapsed_128", "faces/overlays/face_overlay_collapsed_128.png"),
+]
+
+RUNTIME_SHEET_ASSETS = SHEET_ASSETS + TRACK_MOTION_ASSETS + FACE_OVERLAY_ASSETS
+
 FACE_PREVIEW = [
     "faces/face_neutral_128.png",
     "faces/face_blink_128.png",
@@ -67,9 +99,13 @@ MOTION_FRAMES = [
 ]
 
 MOTION_PREVIEW = [
-    "motion/idle_1_128.png",
-    "motion/move_left_1_128.png",
-    "motion/move_right_1_128.png",
+    *(asset.rel for asset in TRACK_MOTION_ASSETS),
+]
+
+MASTER_MOTION_PREVIEW = [
+    "motion/track/idle_breathe_01_128.png",
+    "motion/track/move_left_01_128.png",
+    "motion/track/move_right_01_128.png",
 ]
 
 HAT_PREVIEW = [
@@ -80,6 +116,8 @@ HAT_PREVIEW = [
     "hats/hat_warning_light_128.png",
     "hats/hat_sprout_128.png",
 ]
+
+FACE_OVERLAY_BOUNDS = (34, 31, 94, 72)
 
 FONT = {
     "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
@@ -314,25 +352,127 @@ def make_grid(asset_root: Path, rels: list[str], columns: int) -> Image:
     return out
 
 
+def is_face_pixel(px: tuple[int, int, int, int]) -> bool:
+    r, g, b, a = px
+    if a == 0:
+        return False
+    is_dark = r <= 45 and g <= 50 and b <= 70
+    is_highlight = r >= 240 and g >= 240 and b >= 220
+    return is_dark or is_highlight
+
+
+def make_face_clear_patch(neutral: Image) -> Image:
+    x0, y0, x1, y1 = FACE_OVERLAY_BOUNDS
+    out = Image(CELL, CELL)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            px = neutral.get_pixel(x, y)
+            if px[3] > 0 and not is_face_pixel(px):
+                out.set_pixel(x, y, px)
+    return out
+
+
+def make_face_overlay(face: Image) -> Image:
+    x0, y0, x1, y1 = FACE_OVERLAY_BOUNDS
+    out = Image(CELL, CELL)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            px = face.get_pixel(x, y)
+            if is_face_pixel(px):
+                out.set_pixel(x, y, px)
+    return out
+
+
+def build_face_overlay_outputs(asset_root: Path) -> None:
+    faces = [
+        ("neutral", "faces/face_neutral_128.png"),
+        ("blink", "faces/face_blink_128.png"),
+        ("sleepy", "faces/face_sleepy_128.png"),
+        ("focused", "faces/face_focused_128.png"),
+        ("warning", "faces/face_warning_128.png"),
+        ("collapsed", "faces/face_collapsed_128.png"),
+    ]
+    neutral = load_asset(asset_root, "faces/face_neutral_128.png")
+    write_png(asset_root / "faces/overlays/face_clear_128.png", make_face_clear_patch(neutral))
+    for name, rel in faces:
+        write_png(asset_root / f"faces/overlays/face_overlay_{name}_128.png", make_face_overlay(load_asset(asset_root, rel)))
+
+
+def build_asset_sheet(asset_root: Path, assets: list[Asset], columns: int) -> Image:
+    rows = math.ceil(len(assets) / columns)
+    out = Image(columns * CELL, rows * CELL)
+    for idx, asset in enumerate(assets):
+        alpha_paste(out, load_asset(asset_root, asset.rel), (idx % columns) * CELL, (idx // columns) * CELL)
+    return out
+
+
+def write_manifest(path: Path, image_name: str, assets: list[Asset], columns: int) -> None:
+    rows = math.ceil(len(assets) / columns)
+    payload = {
+        "image": image_name,
+        "cell": {"w": CELL, "h": CELL},
+        "columns": columns,
+        "rows": rows,
+        "animations": {
+            "idle_breathe": {
+                "frames": [asset.name for asset in TRACK_MOTION_ASSETS[:4]],
+                "fps": 2,
+            },
+            "move_left": {
+                "frames": [asset.name for asset in TRACK_MOTION_ASSETS[4:10]],
+                "fps": {"low": 5, "normal": 8, "high": 12},
+            },
+            "move_right": {
+                "frames": [asset.name for asset in TRACK_MOTION_ASSETS[10:16]],
+                "fps": {"low": 5, "normal": 8, "high": 12},
+            },
+        },
+        "frames": [],
+    }
+    for idx, asset in enumerate(assets):
+        payload["frames"].append(
+            {
+                "name": asset.name,
+                "x": (idx % columns) * CELL,
+                "y": (idx // columns) * CELL,
+                "w": CELL,
+                "h": CELL,
+            }
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def build_track_motion_outputs(asset_root: Path) -> None:
+    image_name = "teti_track_motion_track_sheet_128.png"
+    sheet = build_asset_sheet(asset_root, TRACK_MOTION_ASSETS, 6)
+    write_png(asset_root / f"motion/track/{image_name}", sheet)
+    write_manifest(asset_root / "motion/track/teti_track_motion_track_sheet_128.json", image_name, TRACK_MOTION_ASSETS, 6)
+
+
 def build_sheet(asset_root: Path) -> None:
     columns = 6
-    out = Image(columns * CELL, 3 * CELL)
-    for idx, asset in enumerate(SHEET_ASSETS):
+    rows = math.ceil(len(RUNTIME_SHEET_ASSETS) / columns)
+    out = Image(columns * CELL, rows * CELL)
+    for idx, asset in enumerate(RUNTIME_SHEET_ASSETS):
         alpha_paste(out, load_asset(asset_root, asset.rel), (idx % columns) * CELL, (idx // columns) * CELL)
     write_png(asset_root / "sheets/teti_track_master_sheet_128.png", out)
+    runtime_sheet = asset_root.parent.parent / "lua/sprites.png"
+    write_png(runtime_sheet, out)
 
     lines = [
         "# Teti Track Master Sheet 128",
         "",
         "- cell size: 128x128",
         "- columns: 6",
-        "- rows: 3",
+        f"- rows: {rows}",
         "- image: `teti_track_master_sheet_128.png`",
+        "- runtime copy: `pet-runtime/lua/sprites.png`",
         "",
         "| name | x | y | w | h |",
         "|---|---:|---:|---:|---:|",
     ]
-    for idx, asset in enumerate(SHEET_ASSETS):
+    for idx, asset in enumerate(RUNTIME_SHEET_ASSETS):
         x = (idx % columns) * CELL
         y = (idx // columns) * CELL
         lines.append(f"| `{asset.name}` | {x} | {y} | {CELL} | {CELL} |")
@@ -355,7 +495,7 @@ def build_master_preview(asset_root: Path) -> None:
     out = Image.solid(1024, 1024, (235, 242, 242, 255))
     front = load_asset(asset_root, "body/teti_track_front_neutral_128.png")
     side = load_asset(asset_root, "body/teti_track_side_128.png")
-    motion = [load_asset(asset_root, rel) for rel in MOTION_PREVIEW]
+    motion = [load_asset(asset_root, rel) for rel in MASTER_MOTION_PREVIEW]
     hats = [load_asset(asset_root, rel) for rel in HAT_PREVIEW]
     faces = [load_asset(asset_root, rel) for rel in FACE_PREVIEW]
 
@@ -386,8 +526,12 @@ def build_master_preview(asset_root: Path) -> None:
 
 
 def build_previews(asset_root: Path, rebuild_master_preview: bool) -> None:
+    build_face_overlay_outputs(asset_root)
+    build_track_motion_outputs(asset_root)
     write_png(asset_root / "previews/teti_track_faces_preview_128.png", make_grid(asset_root, FACE_PREVIEW, 3))
-    write_png(asset_root / "previews/teti_track_motion_preview_128.png", make_grid(asset_root, MOTION_PREVIEW, 3))
+    write_png(asset_root / "previews/teti_track_face_overlays_preview_128.png", make_grid(asset_root, [asset.rel for asset in FACE_OVERLAY_ASSETS], 4))
+    write_png(asset_root / "previews/teti_track_motion_preview_128.png", make_grid(asset_root, MOTION_PREVIEW, 6))
+    write_png(asset_root / "previews/teti_track_track_motion_preview_128.png", make_grid(asset_root, MOTION_PREVIEW, 6))
     write_png(asset_root / "previews/teti_track_hats_preview_128.png", make_grid(asset_root, HAT_PREVIEW, 3))
     master_preview = asset_root / "previews/teti_track_master_preview_128.png"
     if rebuild_master_preview or not master_preview.exists():

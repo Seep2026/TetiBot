@@ -17,22 +17,31 @@ Config.desktop = {
   edge_margin = 0,
   dock_margin = 78,
   start_x_ratio = 0.72,
-  move_speed = 48,
-  move_speed_min = 34,
-  move_speed_max = 68,
+  move_speed = 29,
+  move_speed_min = 20,
+  move_speed_max = 40,
   walk_min_distance = 180,
   walk_max_distance = 760,
-  long_walk_chance = 0.24,
-  idle_min_delay = 0.5,
-  idle_max_delay = 1.8,
-  turn_chance = 0.42,
+  long_walk_chance = 0.12,
+  idle_min_delay = 5.0,
+  idle_max_delay = 12.0,
+  turn_chance = 0.32,
   fall_gravity = 900,
   fall_max_speed = 520,
 }
 
+Config.movement = {
+  wander_enabled = true,
+  wander_interval_min = 5.0,
+  wander_interval_max = 12.0,
+  wander_duration_min = 1.2,
+  wander_duration_max = 3.0,
+  wander_speed_px_per_sec = 29,
+}
+
 Config.breathing = {
-  enabled = true,
-  body_amplitude = 2,
+  enabled = false,
+  body_amplitude = 1,
   body_speed = 2.6,
   body_cut_y = 92,
   body_overlap = 6,
@@ -42,16 +51,41 @@ Config.drag = {
   enabled = true,
   start_threshold = 3,
   max_frame_delta = 320,
+  settle_time = 0.3,
 }
 
 Config.animation = {
   idle_frame_time = 0.46,
+  idle_fps = 2,
   blink_time = 0.14,
   blink_min_delay = 1.8,
   blink_max_delay = 3.8,
   move_time = 0.9,
   move_min_delay = 2.0,
   move_max_delay = 3.6,
+  move_low_fps = 5,
+  move_normal_fps = 8,
+  move_high_fps = 12,
+  move_normal_speed = 28,
+  move_high_speed = 48,
+}
+
+Config.expression = {
+  overlay_enabled = true,
+  blink_interval_min = 4.0,
+  blink_interval_max = 8.0,
+  blink_duration_min = 0.10,
+  blink_duration_max = 0.18,
+  sleepy_after_idle = 60.0,
+  warning_min_duration = 1.5,
+  collapsed_min_duration = 3.0,
+  debug_keys = true,
+}
+
+Config.debug = {
+  movement_logs = true,
+  expression_logs = true,
+  drag_logs = true,
 }
 
 Config.sprites = {
@@ -63,6 +97,18 @@ Config.sprites = {
   idle_2 = 10,
   move_left = 11,
   move_right = 12,
+  idle_breathe = { 19, 20, 21, 22 },
+  move_left_track = { 23, 24, 25, 26, 27, 28 },
+  move_right_track = { 29, 30, 31, 32, 33, 34 },
+  face_clear = 35,
+  face_overlay = {
+    neutral = 36,
+    blink = 37,
+    sleepy = 38,
+    focused = 39,
+    warning = 40,
+    collapsed = 41,
+  },
 }
 
 Config.menu = {
@@ -84,7 +130,7 @@ function Config.usagi()
     icon = 1,
     pause_menu = false,
     pet_window = true,
-    pixel_perfect = false,
+    pixel_perfect = true,
   }
 end
 

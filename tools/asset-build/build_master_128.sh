@@ -21,6 +21,7 @@ mkdir -p \
   "${OUT_DIR}/body" \
   "${OUT_DIR}/faces" \
   "${OUT_DIR}/motion" \
+  "${OUT_DIR}/motion/track" \
   "${OUT_DIR}/hats" \
   "${OUT_DIR}/previews" \
   "${OUT_DIR}/sheets"
@@ -43,6 +44,12 @@ side="${ART_DIR}/master/teti_track_master_side_128.aseprite"
 faces="${ART_DIR}/faces/teti_track_faces_128.aseprite"
 motion="${ART_DIR}/motion/teti_track_motion_128.aseprite"
 hats="${ART_DIR}/hats/teti_track_hats_128.aseprite"
+motion_generator="${ART_DIR}/scripts/generate_track_motion_128.lua"
+
+if [[ -f "${motion_generator}" ]]; then
+  printf 'generate: %s -> %s\n' "${motion_generator#${ROOT_DIR}/}" "${motion#${ROOT_DIR}/}"
+  "${ASEPRITE_BIN}" -b --script "${motion_generator}" --script-param "root=${ROOT_DIR}"
+fi
 
 export_frame "${front}" 0 "${OUT_DIR}/body/teti_track_front_neutral_128.png"
 export_frame "${side}" 0 "${OUT_DIR}/body/teti_track_side_128.png"
@@ -56,8 +63,27 @@ export_frame "${faces}" 5 "${OUT_DIR}/faces/face_collapsed_128.png"
 
 export_frame "${motion}" 0 "${OUT_DIR}/motion/idle_1_128.png"
 export_frame "${motion}" 1 "${OUT_DIR}/motion/idle_2_128.png"
-export_frame "${motion}" 2 "${OUT_DIR}/motion/move_left_1_128.png"
-export_frame "${motion}" 3 "${OUT_DIR}/motion/move_right_1_128.png"
+export_frame "${motion}" 4 "${OUT_DIR}/motion/move_left_1_128.png"
+export_frame "${motion}" 10 "${OUT_DIR}/motion/move_right_1_128.png"
+
+export_frame "${motion}" 0 "${OUT_DIR}/motion/track/idle_breathe_01_128.png"
+export_frame "${motion}" 1 "${OUT_DIR}/motion/track/idle_breathe_02_128.png"
+export_frame "${motion}" 2 "${OUT_DIR}/motion/track/idle_breathe_03_128.png"
+export_frame "${motion}" 3 "${OUT_DIR}/motion/track/idle_breathe_04_128.png"
+
+export_frame "${motion}" 4 "${OUT_DIR}/motion/track/move_left_01_128.png"
+export_frame "${motion}" 5 "${OUT_DIR}/motion/track/move_left_02_128.png"
+export_frame "${motion}" 6 "${OUT_DIR}/motion/track/move_left_03_128.png"
+export_frame "${motion}" 7 "${OUT_DIR}/motion/track/move_left_04_128.png"
+export_frame "${motion}" 8 "${OUT_DIR}/motion/track/move_left_05_128.png"
+export_frame "${motion}" 9 "${OUT_DIR}/motion/track/move_left_06_128.png"
+
+export_frame "${motion}" 10 "${OUT_DIR}/motion/track/move_right_01_128.png"
+export_frame "${motion}" 11 "${OUT_DIR}/motion/track/move_right_02_128.png"
+export_frame "${motion}" 12 "${OUT_DIR}/motion/track/move_right_03_128.png"
+export_frame "${motion}" 13 "${OUT_DIR}/motion/track/move_right_04_128.png"
+export_frame "${motion}" 14 "${OUT_DIR}/motion/track/move_right_05_128.png"
+export_frame "${motion}" 15 "${OUT_DIR}/motion/track/move_right_06_128.png"
 
 export_frame "${hats}" 0 "${OUT_DIR}/hats/hat_none_128.png"
 export_frame "${hats}" 1 "${OUT_DIR}/hats/hat_beanie_128.png"
