@@ -1,4 +1,6 @@
 local Config = {}
+local SpriteManifest = require("sprites_manifest")
+local HatManifest = require("hats_manifest")
 
 Config.game_width = 128
 Config.game_height = 128
@@ -40,7 +42,7 @@ Config.movement = {
 }
 
 Config.breathing = {
-  enabled = false,
+  enabled = true,
   body_amplitude = 1,
   body_speed = 2.6,
   body_cut_y = 92,
@@ -86,38 +88,27 @@ Config.debug = {
   movement_logs = true,
   expression_logs = true,
   drag_logs = true,
+  hat_logs = true,
+  hat_bounds = true,
 }
 
-Config.sprites = {
-  front = 1,
-  side = 2,
-  face_neutral = 3,
-  face_blink = 4,
-  idle_1 = 9,
-  idle_2 = 10,
-  move_left = 11,
-  move_right = 12,
-  idle_breathe = { 19, 20, 21, 22 },
-  move_left_track = { 23, 24, 25, 26, 27, 28 },
-  move_right_track = { 29, 30, 31, 32, 33, 34 },
-  face_clear = 35,
-  face_overlay = {
-    neutral = 36,
-    blink = 37,
-    sleepy = 38,
-    focused = 39,
-    warning = 40,
-    collapsed = 41,
-  },
-}
+Config.sprites = SpriteManifest
+Config.hats = HatManifest
 
 Config.menu = {
   -- The built-in Usagi font is not a CJK font. Keep the UTF-8 text here
   -- for a future font.png, but render ASCII now to avoid mojibake.
   label_utf8 = "\233\128\128\229\135\186",
   label = "Exit",
-  w = 44,
-  h = 20,
+  hats_label = "Hats >",
+  item_h = 13,
+  minimum_item_w = 15,
+  picker_label_chars = 8,
+  picker_previous_label = "<",
+  picker_next_label = ">",
+  picker_close_label = "X",
+  safe_margin = 3,
+  text_pad_x = 4,
 }
 
 function Config.usagi()

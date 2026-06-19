@@ -42,6 +42,10 @@ function Input.update(pet, menu, pet_module, menu_module)
     end
   end
 
+  if input.key_pressed and input.KEY_H and input.key_pressed(input.KEY_H) and pet_module.cycle_hat then
+    pet_module.cycle_hat(pet)
+  end
+
   if input.mouse_pressed(input.MOUSE_RIGHT) then
     pet_module.end_drag(pet)
     if hovered then
@@ -51,7 +55,7 @@ function Input.update(pet, menu, pet_module, menu_module)
     end
   end
 
-  if menu_module.update(menu) then
+  if menu_module.update(menu, pet, pet_module) then
     pet_module.end_drag(pet)
     return
   end

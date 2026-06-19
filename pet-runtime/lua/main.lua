@@ -2,6 +2,7 @@ Config = require("config")
 Pet = require("pet")
 Input = require("input")
 Menu = require("menu")
+HatRegistry = require("hat_registry")
 
 function _config()
   return Config.usagi()
@@ -10,6 +11,7 @@ end
 function _init()
   math.randomseed(os.time())
   input.set_mouse_visible(true)
+  HatRegistry.validate()
 
   State = {
     pet = Pet.new(),
@@ -19,7 +21,7 @@ end
 
 function _update(dt)
   Input.update(State.pet, State.menu, Pet, Menu)
-  Pet.update(State.pet, dt, State.menu.visible or Pet.drag_blocks_motion(State.pet))
+  Pet.update(State.pet, dt, Pet.drag_blocks_motion(State.pet))
 end
 
 local function clear_canvas()
@@ -33,5 +35,5 @@ end
 function _draw(_dt)
   clear_canvas()
   Pet.draw(State.pet)
-  Menu.draw(State.menu)
+  Menu.draw(State.menu, State.pet)
 end

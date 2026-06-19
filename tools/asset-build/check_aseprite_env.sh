@@ -25,10 +25,12 @@ required_paths=(
   "art/aseprite/master/teti_track_master_side_128.aseprite"
   "art/aseprite/faces/teti_track_faces_128.aseprite"
   "art/aseprite/motion/teti_track_motion_128.aseprite"
-  "art/aseprite/hats/teti_track_hats_128.aseprite"
+  "art/aseprite/hats/teti_track_hat_master.aseprite"
+  "art/aseprite/hats/hats_manifest.json"
   "art/aseprite/scripts/export_tags.lua"
   "art/aseprite/scripts/preview_sheet.lua"
   "art/aseprite/scripts/sheet_manifest.lua"
+  "art/aseprite/scripts/validate_hat_master.lua"
   "tools/asset-build/build_master_128.py"
 )
 

@@ -10,6 +10,7 @@ with the system Python alone.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -22,6 +23,8 @@ from pathlib import Path
 
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
 CELL = 128
+HAT_SOURCE_PATH = "art/aseprite/hats/teti_track_hat_master.aseprite"
+HAT_RUNTIME_ROOT = "pet-runtime/assets/master_128/hats"
 
 
 @dataclass(frozen=True)
@@ -30,7 +33,7 @@ class Asset:
     rel: str
 
 
-SHEET_ASSETS = [
+CORE_SHEET_ASSETS = [
     Asset("teti_track_front_neutral_128", "body/teti_track_front_neutral_128.png"),
     Asset("teti_track_side_128", "body/teti_track_side_128.png"),
     Asset("face_neutral_128", "faces/face_neutral_128.png"),
@@ -43,12 +46,6 @@ SHEET_ASSETS = [
     Asset("idle_2_128", "motion/idle_2_128.png"),
     Asset("move_left_1_128", "motion/move_left_1_128.png"),
     Asset("move_right_1_128", "motion/move_right_1_128.png"),
-    Asset("hat_none_128", "hats/hat_none_128.png"),
-    Asset("hat_beanie_128", "hats/hat_beanie_128.png"),
-    Asset("hat_engineer_128", "hats/hat_engineer_128.png"),
-    Asset("hat_antenna_128", "hats/hat_antenna_128.png"),
-    Asset("hat_warning_light_128", "hats/hat_warning_light_128.png"),
-    Asset("hat_sprout_128", "hats/hat_sprout_128.png"),
 ]
 
 TRACK_MOTION_ASSETS = [
@@ -80,8 +77,6 @@ FACE_OVERLAY_ASSETS = [
     Asset("face_overlay_collapsed_128", "faces/overlays/face_overlay_collapsed_128.png"),
 ]
 
-RUNTIME_SHEET_ASSETS = SHEET_ASSETS + TRACK_MOTION_ASSETS + FACE_OVERLAY_ASSETS
-
 FACE_PREVIEW = [
     "faces/face_neutral_128.png",
     "faces/face_blink_128.png",
@@ -106,15 +101,6 @@ MASTER_MOTION_PREVIEW = [
     "motion/track/idle_breathe_01_128.png",
     "motion/track/move_left_01_128.png",
     "motion/track/move_right_01_128.png",
-]
-
-HAT_PREVIEW = [
-    "hats/hat_none_128.png",
-    "hats/hat_beanie_128.png",
-    "hats/hat_engineer_128.png",
-    "hats/hat_antenna_128.png",
-    "hats/hat_warning_light_128.png",
-    "hats/hat_sprout_128.png",
 ]
 
 FACE_OVERLAY_BOUNDS = (34, 31, 94, 72)
@@ -344,11 +330,137 @@ def load_asset(asset_root: Path, rel: str) -> Image:
     return image
 
 
+def load_hat_manifest(path: Path) -> dict:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    hats = payload.get("hats")
+    if not isinstance(hats, list) or not hats:
+        raise ValueError(f"hat manifest has no hats: {path}")
+
+    if len(hats) != 18:
+        raise ValueError(f"hat manifest must contain exactly 18 hats: {path}")
+
+    seen: set[str] = set()
+    seen_files: set[str] = set()
+    seen_frames: set[int] = set()
+    for index, hat in enumerate(hats):
+        hat_id = hat.get("id")
+        filename = hat.get("file")
+        if not hat_id or not filename:
+            raise ValueError(f"hat entries require id and file: {path}")
+        if hat_id in seen:
+            raise ValueError(f"duplicate hat id {hat_id}: {path}")
+        if filename in seen_files:
+            raise ValueError(f"duplicate hat file {filename}: {path}")
+        if filename != f"hat_{hat_id}_128.png":
+            raise ValueError(f"hat file must match its id: {hat_id} -> {filename}")
+        if hat.get("source_frame") != index:
+            raise ValueError(f"hat {hat_id} must map source frame {index}: {path}")
+        if index in seen_frames:
+            raise ValueError(f"duplicate source frame {index}: {path}")
+        if any(part in filename.lower() for part in ("debug", "deprecated", "fallback", "codex")):
+            raise ValueError(f"forbidden production hat path: {filename}")
+        seen.add(hat_id)
+        seen_files.add(filename)
+        seen_frames.add(index)
+    return payload
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def hat_assets(hat_manifest: dict) -> list[Asset]:
+    return [Asset(f"hat_{hat['id']}_128", f"hats/{hat['file']}") for hat in hat_manifest["hats"]]
+
+
+def alpha_pixel_count(image: Image) -> int:
+    return sum(1 for i in range(3, len(image.pixels), 4) if image.pixels[i] > 0)
+
+
+def nontransparent_bounds(image: Image) -> tuple[int, int, int, int] | None:
+    points = [
+        (x, y)
+        for y in range(image.height)
+        for x in range(image.width)
+        if image.get_pixel(x, y)[3] > 0
+    ]
+    if not points:
+        return None
+    return (
+        min(x for x, _ in points),
+        min(y for _, y in points),
+        max(x for x, _ in points),
+        max(y for _, y in points),
+    )
+
+
+def build_hat_outputs(asset_root: Path, hat_manifest: dict) -> None:
+    hats_dir = asset_root / "hats"
+    hats_dir.mkdir(parents=True, exist_ok=True)
+    definitions = hat_manifest["hats"]
+
+    bounds = hat_manifest["bounds"]
+    min_x = bounds["x"]
+    min_y = bounds["y"]
+    max_x = min_x + bounds["w"] - 1
+    max_y = min_y + bounds["h"] - 1
+    for hat in definitions:
+        path = hats_dir / hat["file"]
+        image = load_asset(asset_root, f"hats/{hat['file']}")
+        opaque_bounds = nontransparent_bounds(image)
+        if opaque_bounds is None:
+            if hat["id"] != "none":
+                raise ValueError(f"hat has no visible pixels: {path}")
+            continue
+        x0, y0, x1, y1 = opaque_bounds
+        if x0 < min_x or y0 < min_y or x1 > max_x or y1 > max_y:
+            raise ValueError(
+                f"hat exceeds head bounds {min_x},{min_y}-{max_x},{max_y}: {path} has {opaque_bounds}"
+            )
+
+    (hats_dir / "hats_manifest.json").write_text(
+        json.dumps(hat_manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def make_grid(asset_root: Path, rels: list[str], columns: int) -> Image:
     rows = math.ceil(len(rels) / columns)
     out = Image(columns * CELL, rows * CELL)
     for idx, rel in enumerate(rels):
         alpha_paste(out, load_asset(asset_root, rel), (idx % columns) * CELL, (idx // columns) * CELL)
+    return out
+
+
+def make_hat_grid(asset_root: Path, rels: list[str], columns: int) -> Image:
+    rows = math.ceil(len(rels) / columns)
+    out = Image(columns * CELL, rows * CELL)
+    body = load_asset(asset_root, "body/teti_track_front_neutral_128.png")
+    for idx, rel in enumerate(rels):
+        composite = Image(CELL, CELL, bytearray(body.pixels))
+        alpha_paste(composite, load_asset(asset_root, rel), 0, 0)
+        alpha_paste(out, composite, (idx % columns) * CELL, (idx // columns) * CELL)
+    return out
+
+
+def nearest_resize(source: Image, width: int, height: int) -> Image:
+    out = Image(width, height)
+    for y in range(height):
+        source_y = min(source.height - 1, y * source.height // height)
+        for x in range(width):
+            source_x = min(source.width - 1, x * source.width // width)
+            out.set_pixel(x, y, source.get_pixel(source_x, source_y))
+    return out
+
+
+def make_hat_grid_64(asset_root: Path, rels: list[str], columns: int) -> Image:
+    rows = math.ceil(len(rels) / columns)
+    out = Image(columns * 64, rows * 64)
+    body = load_asset(asset_root, "body/teti_track_front_neutral_128.png")
+    for idx, rel in enumerate(rels):
+        composite = Image(CELL, CELL, bytearray(body.pixels))
+        alpha_paste(composite, load_asset(asset_root, rel), 0, 0)
+        alpha_paste(out, nearest_resize(composite, 64, 64), (idx % columns) * 64, (idx // columns) * 64)
     return out
 
 
@@ -450,11 +562,129 @@ def build_track_motion_outputs(asset_root: Path) -> None:
     write_manifest(asset_root / "motion/track/teti_track_motion_track_sheet_128.json", image_name, TRACK_MOTION_ASSETS, 6)
 
 
-def build_sheet(asset_root: Path) -> None:
+def lua_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=True)
+
+
+def write_runtime_manifests(
+    asset_root: Path,
+    runtime_assets: list[Asset],
+    hat_manifest: dict,
+    hat_master: Path,
+    hat_manifest_path: Path,
+    runtime_sheet: Path,
+) -> None:
+    indices = {asset.name: idx + 1 for idx, asset in enumerate(runtime_assets)}
+    runtime_dir = asset_root.parent.parent / "lua"
+    body_bounds = nontransparent_bounds(load_asset(asset_root, "body/teti_track_front_neutral_128.png"))
+    if body_bounds is None:
+        raise ValueError("front body sprite has no visible pixels")
+    body_x0, body_y0, body_x1, body_y1 = body_bounds
+
+    def frame(name: str) -> int:
+        if name not in indices:
+            raise ValueError(f"runtime sprite is missing from sheet: {name}")
+        return indices[name]
+
+    sprite_lines = [
+        "-- Generated by tools/asset-build/build_master_128.py. Do not edit by hand.",
+        "return {",
+        f"  front = {frame('teti_track_front_neutral_128')},",
+        f"  side = {frame('teti_track_side_128')},",
+        f"  face_neutral = {frame('face_neutral_128')},",
+        f"  face_blink = {frame('face_blink_128')},",
+        f"  idle_1 = {frame('idle_1_128')},",
+        f"  idle_2 = {frame('idle_2_128')},",
+        f"  move_left = {frame('move_left_1_128')},",
+        f"  move_right = {frame('move_right_1_128')},",
+        "  body_bounds = { x = %d, y = %d, w = %d, h = %d },"
+        % (body_x0, body_y0, body_x1 - body_x0 + 1, body_y1 - body_y0 + 1),
+        "  idle_breathe = { " + ", ".join(str(frame(asset.name)) for asset in TRACK_MOTION_ASSETS[:4]) + " },",
+        "  move_left_track = { " + ", ".join(str(frame(asset.name)) for asset in TRACK_MOTION_ASSETS[4:10]) + " },",
+        "  move_right_track = { " + ", ".join(str(frame(asset.name)) for asset in TRACK_MOTION_ASSETS[10:16]) + " },",
+        f"  face_clear = {frame('face_clear_128')},",
+        "  face_overlay = {",
+        f"    neutral = {frame('face_overlay_neutral_128')},",
+        f"    blink = {frame('face_overlay_blink_128')},",
+        f"    sleepy = {frame('face_overlay_sleepy_128')},",
+        f"    focused = {frame('face_overlay_focused_128')},",
+        f"    warning = {frame('face_overlay_warning_128')},",
+        f"    collapsed = {frame('face_overlay_collapsed_128')},",
+        "  },",
+        "}",
+        "",
+    ]
+    (runtime_dir / "sprites_manifest.lua").write_text("\n".join(sprite_lines), encoding="utf-8")
+
+    anchor = hat_manifest["anchor"]
+    hats = hat_manifest["hats"]
+    source_sha256 = sha256_file(hat_master)
+    manifest_sha256 = sha256_file(hat_manifest_path)
+    atlas_sha256 = sha256_file(runtime_sheet)
+    build_id = hashlib.sha256(
+        f"{source_sha256}:{manifest_sha256}:{atlas_sha256}".encode("ascii")
+    ).hexdigest()[:16]
+    hat_lines = [
+        "-- Generated from art/aseprite/hats/hats_manifest.json. Do not edit by hand.",
+        "return {",
+        '  source = "aseprite_master",',
+        f"  source_path = {lua_string(HAT_SOURCE_PATH)},",
+        f"  source_sha256 = {lua_string(source_sha256)},",
+        f"  manifest_sha256 = {lua_string(manifest_sha256)},",
+        f"  atlas_sha256 = {lua_string(atlas_sha256)},",
+        f"  build_id = {lua_string(build_id)},",
+        '  cache = "fresh",',
+        '  render_layer = "world",',
+        '  transform = "linked_to_body",',
+        f"  expected_count = {len(hats)},",
+        f"  anchor = {{ name = {lua_string(anchor['name'])}, x = {anchor['x']}, y = {anchor['y']} }},",
+        "  order = { " + ", ".join(lua_string(hat["id"]) for hat in hats) + " },",
+        "  menu = { " + ", ".join(lua_string(hat["id"]) for hat in hats if hat.get("menu")) + " },",
+        "  by_id = {",
+    ]
+    for hat in hats:
+        sprite = frame(f"hat_{hat['id']}_128")
+        opaque_bounds = nontransparent_bounds(load_asset(asset_root, f"hats/{hat['file']}"))
+        bounds_lua = ""
+        if opaque_bounds is not None:
+            x0, y0, x1, y1 = opaque_bounds
+            bounds_lua = ", bounds = { x = %d, y = %d, w = %d, h = %d }" % (
+                x0,
+                y0,
+                x1 - x0 + 1,
+                y1 - y0 + 1,
+            )
+        hat_lines.append(
+            "    [%s] = { id = %s, label = %s, category = %s, sprite = %d, "
+            "asset_key = %s, file = %s, source_tag = %s, source_frame = %d%s },"
+            % (
+                lua_string(hat["id"]),
+                lua_string(hat["id"]),
+                lua_string(hat["label"]),
+                lua_string(hat["category"]),
+                sprite,
+                lua_string(f"hat_{hat['id']}_128"),
+                lua_string(f"{HAT_RUNTIME_ROOT}/{hat['file']}"),
+                lua_string(hat["id"]),
+                hat["source_frame"],
+                bounds_lua,
+            )
+        )
+    hat_lines.extend(["  },", "}", ""])
+    (runtime_dir / "hats_manifest.lua").write_text("\n".join(hat_lines), encoding="utf-8")
+
+
+def build_sheet(
+    asset_root: Path,
+    runtime_assets: list[Asset],
+    hat_manifest: dict,
+    hat_master: Path,
+    hat_manifest_path: Path,
+) -> None:
     columns = 6
-    rows = math.ceil(len(RUNTIME_SHEET_ASSETS) / columns)
+    rows = math.ceil(len(runtime_assets) / columns)
     out = Image(columns * CELL, rows * CELL)
-    for idx, asset in enumerate(RUNTIME_SHEET_ASSETS):
+    for idx, asset in enumerate(runtime_assets):
         alpha_paste(out, load_asset(asset_root, asset.rel), (idx % columns) * CELL, (idx // columns) * CELL)
     write_png(asset_root / "sheets/teti_track_master_sheet_128.png", out)
     runtime_sheet = asset_root.parent.parent / "lua/sprites.png"
@@ -472,12 +702,20 @@ def build_sheet(asset_root: Path) -> None:
         "| name | x | y | w | h |",
         "|---|---:|---:|---:|---:|",
     ]
-    for idx, asset in enumerate(RUNTIME_SHEET_ASSETS):
+    for idx, asset in enumerate(runtime_assets):
         x = (idx % columns) * CELL
         y = (idx // columns) * CELL
         lines.append(f"| `{asset.name}` | {x} | {y} | {CELL} | {CELL} |")
     lines.append("")
     (asset_root / "sheets/teti_track_master_sheet_128.md").write_text("\n".join(lines), encoding="utf-8")
+    write_runtime_manifests(
+        asset_root,
+        runtime_assets,
+        hat_manifest,
+        hat_master,
+        hat_manifest_path,
+        runtime_sheet,
+    )
 
 
 def panel(image: Image, x: int, y: int, w: int, h: int, title: str) -> None:
@@ -491,12 +729,12 @@ def preview_sprite(image: Image, sprite: Image, x: int, y: int) -> None:
     alpha_paste(image, sprite, x, y)
 
 
-def build_master_preview(asset_root: Path) -> None:
+def build_master_preview(asset_root: Path, hat_preview: list[str]) -> None:
     out = Image.solid(1024, 1024, (235, 242, 242, 255))
     front = load_asset(asset_root, "body/teti_track_front_neutral_128.png")
     side = load_asset(asset_root, "body/teti_track_side_128.png")
     motion = [load_asset(asset_root, rel) for rel in MASTER_MOTION_PREVIEW]
-    hats = [load_asset(asset_root, rel) for rel in HAT_PREVIEW]
+    hats = [load_asset(asset_root, rel) for rel in hat_preview[:6]]
     faces = [load_asset(asset_root, rel) for rel in FACE_PREVIEW]
 
     panel(out, 24, 24, 224, 224, "FRONT")
@@ -525,17 +763,19 @@ def build_master_preview(asset_root: Path) -> None:
     write_png(asset_root / "previews/teti_track_master_preview_128.png", out)
 
 
-def build_previews(asset_root: Path, rebuild_master_preview: bool) -> None:
+def build_previews(asset_root: Path, rebuild_master_preview: bool, hat_manifest: dict) -> None:
+    hat_preview = [f"hats/{hat['file']}" for hat in hat_manifest["hats"]]
     build_face_overlay_outputs(asset_root)
     build_track_motion_outputs(asset_root)
     write_png(asset_root / "previews/teti_track_faces_preview_128.png", make_grid(asset_root, FACE_PREVIEW, 3))
     write_png(asset_root / "previews/teti_track_face_overlays_preview_128.png", make_grid(asset_root, [asset.rel for asset in FACE_OVERLAY_ASSETS], 4))
     write_png(asset_root / "previews/teti_track_motion_preview_128.png", make_grid(asset_root, MOTION_PREVIEW, 6))
     write_png(asset_root / "previews/teti_track_track_motion_preview_128.png", make_grid(asset_root, MOTION_PREVIEW, 6))
-    write_png(asset_root / "previews/teti_track_hats_preview_128.png", make_grid(asset_root, HAT_PREVIEW, 3))
+    write_png(asset_root / "previews/teti_track_hats_preview_128.png", make_hat_grid(asset_root, hat_preview, 6))
+    write_png(asset_root / "previews/teti_track_hats_preview_64.png", make_hat_grid_64(asset_root, hat_preview, 6))
     master_preview = asset_root / "previews/teti_track_master_preview_128.png"
     if rebuild_master_preview or not master_preview.exists():
-        build_master_preview(asset_root)
+        build_master_preview(asset_root, hat_preview)
     else:
         print(f"preserved curated master preview: {master_preview}")
 
@@ -544,6 +784,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--asset-root", required=True, type=Path)
     parser.add_argument(
+        "--hat-manifest",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "art/aseprite/hats/hats_manifest.json",
+    )
+    parser.add_argument(
+        "--hat-master",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / HAT_SOURCE_PATH,
+    )
+    parser.add_argument(
+        "--list-hat-exports",
+        action="store_true",
+        help="print Aseprite source frame and filename pairs for shell export",
+    )
+    parser.add_argument(
         "--rebuild-master-preview",
         action="store_true",
         help="replace teti_track_master_preview_128.png with the generated fallback overview",
@@ -551,8 +806,21 @@ def main() -> int:
     args = parser.parse_args()
 
     asset_root = args.asset_root.resolve()
-    build_previews(asset_root, args.rebuild_master_preview)
-    build_sheet(asset_root)
+    hat_manifest_path = args.hat_manifest.resolve()
+    hat_master = args.hat_master.resolve()
+    if not hat_master.is_file():
+        raise FileNotFoundError(hat_master)
+    hat_manifest = load_hat_manifest(hat_manifest_path)
+    if args.list_hat_exports:
+        for hat in hat_manifest["hats"]:
+            if "source_frame" in hat:
+                print(f"{hat['source_frame']}\t{hat['file']}")
+        return 0
+
+    build_hat_outputs(asset_root, hat_manifest)
+    runtime_assets = CORE_SHEET_ASSETS + TRACK_MOTION_ASSETS + FACE_OVERLAY_ASSETS + hat_assets(hat_manifest)
+    build_previews(asset_root, args.rebuild_master_preview, hat_manifest)
+    build_sheet(asset_root, runtime_assets, hat_manifest, hat_master, hat_manifest_path)
     print(f"wrote previews and sheets under {asset_root}")
     return 0
 

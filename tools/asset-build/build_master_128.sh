@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ASEPRITE_BIN="${ASEPRITE_BIN:-${DEFAULT_ASEPRITE_BIN}}"
 OUT_DIR="${MASTER_128_OUT_DIR:-${ROOT_DIR}/pet-runtime/assets/master_128}"
 ART_DIR="${ROOT_DIR}/art/aseprite"
+RUNTIME_LUA_DIR="${ROOT_DIR}/pet-runtime/lua"
 
 fail() {
   printf 'error: %s\n' "$*" >&2
@@ -43,13 +44,32 @@ front="${ART_DIR}/master/teti_track_master_front_128.aseprite"
 side="${ART_DIR}/master/teti_track_master_side_128.aseprite"
 faces="${ART_DIR}/faces/teti_track_faces_128.aseprite"
 motion="${ART_DIR}/motion/teti_track_motion_128.aseprite"
-hats="${ART_DIR}/hats/teti_track_hats_128.aseprite"
+hats="${ART_DIR}/hats/teti_track_hat_master.aseprite"
+hat_manifest="${ART_DIR}/hats/hats_manifest.json"
+hat_validator="${ART_DIR}/scripts/validate_hat_master.lua"
 motion_generator="${ART_DIR}/scripts/generate_track_motion_128.lua"
+
+if [[ -e "${ART_DIR}/hats/debug" ]]; then
+  fail "deprecated hat sources are not allowed under art/aseprite/hats/debug"
+fi
 
 if [[ -f "${motion_generator}" ]]; then
   printf 'generate: %s -> %s\n' "${motion_generator#${ROOT_DIR}/}" "${motion#${ROOT_DIR}/}"
   "${ASEPRITE_BIN}" -b --script "${motion_generator}" --script-param "root=${ROOT_DIR}"
 fi
+
+"${ASEPRITE_BIN}" -b \
+  --script-param "path=${hats}" \
+  --script-param "manifest=${hat_manifest}" \
+  --script "${hat_validator}"
+
+printf 'invalidate: stale production hats and runtime atlas metadata\n'
+find "${OUT_DIR}/hats" -maxdepth 1 -type f \
+  \( -name 'hat_*_128.png' -o -name 'hats_manifest.json' \) -delete
+rm -f \
+  "${RUNTIME_LUA_DIR}/sprites.png" \
+  "${RUNTIME_LUA_DIR}/sprites_manifest.lua" \
+  "${RUNTIME_LUA_DIR}/hats_manifest.lua"
 
 export_frame "${front}" 0 "${OUT_DIR}/body/teti_track_front_neutral_128.png"
 export_frame "${side}" 0 "${OUT_DIR}/body/teti_track_side_128.png"
@@ -85,18 +105,26 @@ export_frame "${motion}" 13 "${OUT_DIR}/motion/track/move_right_04_128.png"
 export_frame "${motion}" 14 "${OUT_DIR}/motion/track/move_right_05_128.png"
 export_frame "${motion}" 15 "${OUT_DIR}/motion/track/move_right_06_128.png"
 
-export_frame "${hats}" 0 "${OUT_DIR}/hats/hat_none_128.png"
-export_frame "${hats}" 1 "${OUT_DIR}/hats/hat_beanie_128.png"
-export_frame "${hats}" 2 "${OUT_DIR}/hats/hat_engineer_128.png"
-export_frame "${hats}" 3 "${OUT_DIR}/hats/hat_antenna_128.png"
-export_frame "${hats}" 4 "${OUT_DIR}/hats/hat_warning_light_128.png"
-export_frame "${hats}" 5 "${OUT_DIR}/hats/hat_sprout_128.png"
+while IFS=$'\t' read -r frame_index output_name; do
+  export_frame "${hats}" "${frame_index}" "${OUT_DIR}/hats/${output_name}"
+done < <(
+  python3 "${SCRIPT_DIR}/build_master_128.py" \
+    --asset-root "${OUT_DIR}" \
+    --hat-manifest "${hat_manifest}" \
+    --list-hat-exports
+)
 
-python_args=(--asset-root "${OUT_DIR}")
+python_args=(
+  --asset-root "${OUT_DIR}"
+  --hat-manifest "${hat_manifest}"
+  --hat-master "${hats}"
+)
 if [[ "${REBUILD_MASTER_PREVIEW:-0}" == "1" ]]; then
   python_args+=(--rebuild-master-preview)
 fi
 
 python3 "${SCRIPT_DIR}/build_master_128.py" "${python_args[@]}"
+
+find "${ROOT_DIR}/art" "${OUT_DIR}" -type f -name '.DS_Store' -delete
 
 printf 'master_128 asset build complete: %s\n' "${OUT_DIR}"

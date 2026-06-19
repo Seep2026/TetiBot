@@ -12,7 +12,7 @@ The `.aseprite` files live under `art/aseprite/`:
 | `master/teti_track_master_side_128.aseprite` | Side body master. Exports `body/teti_track_side_128.png`. |
 | `faces/teti_track_faces_128.aseprite` | Six face states in frame order: neutral, blink, sleepy, focused, warning, collapsed. |
 | `motion/teti_track_motion_128.aseprite` | Four motion frames: idle 1, idle 2, move left 1, move right 1. |
-| `hats/teti_track_hats_128.aseprite` | Six hats in frame order: none, beanie, engineer, antenna, warning light, sprout. |
+| `hats/teti_track_hat_master.aseprite` | Single source of truth for all 18 hats. Contains visible `HATS`, hidden `HEAD_GUIDE_LAYER`, and one named tag per frame. |
 
 ## Script Boundary
 
@@ -26,7 +26,7 @@ The Lua helpers in `art/aseprite/scripts/` are for source inspection and ad hoc 
 | `preview_sheet.lua` | Export a quick sheet for visual inspection. |
 | `sheet_manifest.lua` | Write a markdown manifest of frame order and tags. |
 
-The Python helper `tools/asset-build/build_master_128.py` composes previews, the 6x3 runtime sheet, and the markdown sheet manifest. It uses only the Python standard library.
+The Python helper `tools/asset-build/build_master_128.py` composes previews, the 6-column runtime sheet, and the markdown sheet manifest. It validates hats but never generates or repairs their pixels. It uses only the Python standard library.
 
 `previews/teti_track_master_preview_128.png` is a curated editorial overview. It includes a PARTS section that is not recoverable from the current flattened master `.aseprite` files. The normal rebuild preserves this committed file when it already exists. If building into an empty output directory, the Python helper creates a same-size fallback overview so the output set is still complete. Set `REBUILD_MASTER_PREVIEW=1` to replace it with the generated fallback.
 

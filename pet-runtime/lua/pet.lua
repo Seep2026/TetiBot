@@ -21,6 +21,33 @@ local function drag_log(message, ...)
   end
 end
 
+local function hat_log(message, ...)
+  if Config.debug and Config.debug.hat_logs then
+    print(string.format("[TetiHat] " .. message, ...))
+  end
+end
+
+local function new_hat_state()
+  local unlocked = {}
+  for _, hat_id in ipairs(Config.hats.order or {}) do
+    unlocked[#unlocked + 1] = hat_id
+  end
+  return {
+    currentHat = "none",
+    unlockedHats = unlocked,
+    isChanging = false,
+  }
+end
+
+local function hat_is_unlocked(hat_state, hat_id)
+  for _, unlocked_id in ipairs(hat_state.unlockedHats or {}) do
+    if unlocked_id == hat_id then
+      return true
+    end
+  end
+  return false
+end
+
 local function clamp(value, min, max)
   if value < min then
     return min
@@ -286,8 +313,13 @@ local function update_body_breath(pet, dt)
   end
 
   pet.breath_t = pet.breath_t + dt
-  local wave = (math.sin(pet.breath_t * breathing.body_speed + pet.idle_phase) + 1) * 0.5
-  pet.body_offset_y = math.floor(wave * breathing.body_amplitude + 0.5)
+  local offset = math.sin(pet.breath_t * breathing.body_speed + pet.idle_phase)
+      * breathing.body_amplitude
+  if offset >= 0 then
+    pet.body_offset_y = math.floor(offset + 0.5)
+  else
+    pet.body_offset_y = math.ceil(offset - 0.5)
+  end
 end
 
 local function sync_from_native_window(pet)
@@ -306,6 +338,7 @@ function Pet.new()
   local desktop = read_desktop_bounds()
   local displays = read_display_bounds()
   local size = Config.pet_size
+  local hat_state = new_hat_state()
   local pet = {
     x = 0,
     y = 0,
@@ -356,6 +389,8 @@ function Pet.new()
     drag_grab_offset_y = 0,
     settle_left = 0,
     settle_after_fall = false,
+    hatState = hat_state,
+    hat_state = hat_state,
   }
 
   local min_x, max_x = window_limits(pet)
@@ -368,6 +403,55 @@ function Pet.new()
 	  sync_window(pet, pet.window_x, pet.window_y)
 	  return pet
 	end
+
+function Pet.set_hat(pet, hat_id)
+  local hat = Config.hats.by_id and Config.hats.by_id[hat_id]
+  local hat_state = pet.hatState or pet.hat_state
+  if not hat or not hat_state or not hat_is_unlocked(hat_state, hat_id) then
+    return false
+  end
+
+  hat_state.isChanging = true
+  hat_state.currentHat = hat_id
+  hat_state.isChanging = false
+  hat_log("set hat=%s", hat_id)
+  return true
+end
+
+Pet.setHat = Pet.set_hat
+
+function Pet.cycle_hat(pet)
+  local hat_state = pet.hatState or pet.hat_state
+  local order = Config.hats.order or {}
+  if not hat_state or #order == 0 then
+    return false
+  end
+
+  local current_index = 0
+  for index, hat_id in ipairs(order) do
+    if hat_id == hat_state.currentHat then
+      current_index = index
+      break
+    end
+  end
+
+  for offset = 1, #order do
+    local index = ((current_index + offset - 1) % #order) + 1
+    local hat_id = order[index]
+    if hat_is_unlocked(hat_state, hat_id) then
+      return Pet.set_hat(pet, hat_id)
+    end
+  end
+  return false
+end
+
+function Pet.current_hat(pet)
+  local hat_state = pet.hatState or pet.hat_state
+  if not hat_state then
+    return Config.hats.by_id and Config.hats.by_id.none
+  end
+  return Config.hats.by_id and Config.hats.by_id[hat_state.currentHat]
+end
 
 function Pet.set_window_position(pet, x, y)
   sync_window(pet, x, y)

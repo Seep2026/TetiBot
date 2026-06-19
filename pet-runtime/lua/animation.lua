@@ -2,6 +2,10 @@ local Config = require("config")
 
 local Animation = {}
 
+local function clamp(value, min, max)
+  return math.max(min, math.min(max, value))
+end
+
 local function sprite_source(sprite)
   local index = sprite - 1
   local cell = Config.sprite_size
@@ -94,6 +98,20 @@ local function face_sprite_for(pet)
   return overlays[pet.expression or "neutral"] or overlays.neutral
 end
 
+local function hat_for(pet)
+  local hat_state = pet.hatState or pet.hat_state
+  local hat_id = hat_state and hat_state.currentHat or "none"
+  if hat_id == "none" then
+    return nil
+  end
+  return Config.hats.by_id and Config.hats.by_id[hat_id] or nil
+end
+
+local function hat_sprite_for(pet)
+  local hat = hat_for(pet)
+  return hat and hat.sprite or nil
+end
+
 local function draw_sprite(sprite, x, y, flip_x)
   gfx.spr_ex(
     sprite,
@@ -149,28 +167,104 @@ local function draw_layered(sprite, pet, flip_x)
   draw_rect(sx, sy, size, body_h, x, body_y, flip_x)
 end
 
+local function draw_cross(x, y, color)
+  gfx.line(x - 2, y, x + 2, y, color)
+  gfx.line(x, y - 2, x, y + 2, color)
+end
+
+local function draw_debug_bounds(pet, hat, hat_x, hat_y, pose_dx, pose_dy)
+  if not (usagi and usagi.IS_DEV and Config.debug and Config.debug.hat_bounds) then
+    return
+  end
+
+  gfx.rect(
+    pet.x,
+    pet.y,
+    Config.game_width - 1,
+    Config.game_height - 1,
+    gfx.COLOR_RED
+  )
+
+  local body = Config.sprites.body_bounds
+  if body then
+    gfx.rect(
+      pet.x + body.x + pose_dx,
+      pet.y + body.y + pose_dy,
+      body.w,
+      body.h,
+      gfx.COLOR_BLUE
+    )
+  end
+
+  if hat and hat.bounds then
+    gfx.rect(
+      hat_x + hat.bounds.x,
+      hat_y + hat.bounds.y,
+      hat.bounds.w,
+      hat.bounds.h,
+      gfx.COLOR_GREEN
+    )
+  end
+
+  local anchor = Config.hats.anchor
+  if anchor then
+    draw_cross(
+      pet.x + anchor.x + pose_dx,
+      pet.y + anchor.y + 2 + pose_dy,
+      gfx.COLOR_BLUE
+    )
+    draw_cross(
+      hat_x + anchor.x,
+      hat_y + anchor.y,
+      gfx.COLOR_GREEN
+    )
+  end
+
+  local path_start_x = pet.x + Config.game_width * 0.5
+  local path_y = pet.y + Config.game_height - 4
+  local target_delta = (pet.target_x or pet.window_x or 0) - (pet.window_x or 0)
+  local path_end_x = clamp(path_start_x + target_delta, pet.x + 2, pet.x + Config.game_width - 3)
+  gfx.line(path_start_x, path_y, path_end_x, path_y, gfx.COLOR_YELLOW)
+end
+
 function Animation.draw(pet)
   local sprite, flip_x, face_dx, face_dy = pose_for(pet)
+  local body_offset_y = Config.breathing.enabled and (pet.body_offset_y or 0) or 0
+  local overlay_x = pet.x + (face_dx or 0)
+  local overlay_y = pet.y + (face_dy or 0) + body_offset_y
+  local hat_x = pet.x + (face_dx or 0)
+  local hat_y = pet.y + (face_dy or 0) + body_offset_y
+
+  -- Render pipeline: body -> face -> hat -> effects.
   draw_layered(sprite, pet, flip_x)
 
   if Config.expression.overlay_enabled and Config.sprites.face_clear then
-    local x = pet.x + (face_dx or 0)
-    local y = pet.y + (face_dy or 0)
-    draw_sprite(Config.sprites.face_clear, x, y, false)
+    draw_sprite(Config.sprites.face_clear, overlay_x, overlay_y, false)
     local face = face_sprite_for(pet)
     if face then
-      draw_sprite(face, x, y, false)
+      draw_sprite(face, overlay_x, overlay_y, false)
     end
   end
+
+  local hat = hat_for(pet)
+  if hat then
+    draw_sprite(hat.sprite, hat_x, hat_y, false)
+  end
+  draw_debug_bounds(pet, hat, hat_x, hat_y, face_dx or 0, face_dy or 0)
 end
 
 function Animation.debug_pose_for(pet)
   local sprite, flip_x, face_dx, face_dy = pose_for(pet)
+  local body_offset_y = Config.breathing.enabled and (pet.body_offset_y or 0) or 0
+  local linked_dy = (face_dy or 0) + body_offset_y
   return {
     sprite = sprite,
     flip_x = flip_x,
     face_dx = face_dx,
-    face_dy = face_dy,
+    face_dy = linked_dy,
+    hat_dx = face_dx or 0,
+    hat_dy = linked_dy,
+    hat_sprite = hat_sprite_for(pet),
   }
 end
 

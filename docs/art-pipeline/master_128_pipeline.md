@@ -85,12 +85,7 @@ The motion preview is a 3-column visual overview: idle, move left, and move righ
 | `teti_track_motion_128.aseprite` | 1 | `motion/idle_2_128.png` |
 | `teti_track_motion_128.aseprite` | 2 | `motion/move_left_1_128.png` |
 | `teti_track_motion_128.aseprite` | 3 | `motion/move_right_1_128.png` |
-| `teti_track_hats_128.aseprite` | 0 | `hats/hat_none_128.png` |
-| `teti_track_hats_128.aseprite` | 1 | `hats/hat_beanie_128.png` |
-| `teti_track_hats_128.aseprite` | 2 | `hats/hat_engineer_128.png` |
-| `teti_track_hats_128.aseprite` | 3 | `hats/hat_antenna_128.png` |
-| `teti_track_hats_128.aseprite` | 4 | `hats/hat_warning_light_128.png` |
-| `teti_track_hats_128.aseprite` | 5 | `hats/hat_sprout_128.png` |
+| `teti_track_hat_master.aseprite` | 0-17 | `hats/hat_*_128.png`, mapped by `art/aseprite/hats/hats_manifest.json` |
 
 ## Current Production Readiness
 
