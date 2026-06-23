@@ -1,6 +1,7 @@
 local Config = require("config")
 
 local Input = {}
+local signal_nonce = os.time() * 1000 + math.random(0, 999)
 
 local DEBUG_EXPRESSIONS = {
   { key = "KEY_1", expression = "neutral" },
@@ -24,6 +25,20 @@ local function mouse_screen(mx, my)
   return mx, my
 end
 
+local function point_in_rect(x, y, rect)
+  return x >= rect.x and y >= rect.y and x < rect.x + rect.w and y < rect.y + rect.h
+end
+
+local function over_pet_screen(mx, my)
+  local rect = Config.interaction and Config.interaction.screen_rect
+  return rect and point_in_rect(mx, my, rect)
+end
+
+local function send_bridge_signal(command)
+  signal_nonce = signal_nonce + 1
+  usagi.save({ command = command, nonce = signal_nonce })
+end
+
 function Input.update(pet, menu, pet_module, menu_module)
   local mx, my = input.mouse()
   local sx, sy = mouse_screen(mx, my)
@@ -42,33 +57,23 @@ function Input.update(pet, menu, pet_module, menu_module)
     end
   end
 
-  if input.key_pressed and input.KEY_H and input.key_pressed(input.KEY_H) and pet_module.cycle_hat then
-    pet_module.cycle_hat(pet)
-  end
-
   if input.mouse_pressed(input.MOUSE_RIGHT) then
-    pet_module.end_drag(pet)
-    if hovered then
-      menu_module.show(menu, mx, my)
-    else
-      menu_module.hide(menu)
-    end
-  end
-
-  if menu_module.update(menu, pet, pet_module) then
     pet_module.end_drag(pet)
     return
   end
 
   if input.mouse_pressed(input.MOUSE_LEFT) then
     if hovered then
-      menu_module.hide(menu)
       pet_module.begin_drag(pet, mx, my, sx, sy)
     end
   elseif input.mouse_held(input.MOUSE_LEFT) then
     pet_module.drag_to(pet, sx, sy)
   elseif input.mouse_released(input.MOUSE_LEFT) then
+    local should_open_mail = pet.drag_pending and over_pet_screen(mx, my)
     pet_module.end_drag(pet)
+    if should_open_mail then
+      send_bridge_signal("open_mail")
+    end
   end
 end
 

@@ -33,7 +33,12 @@ local function compact_label(label)
 end
 
 local function root_labels()
-  return { Config.menu.hats_label, Config.menu.label }
+  return { Config.menu.hats_label, Config.menu.mail_label, Config.menu.label }
+end
+
+local function send_bridge_signal(menu, command)
+  menu.signal_nonce = menu.signal_nonce + 1
+  usagi.save({ command = command, nonce = menu.signal_nonce })
 end
 
 local function picker_labels(menu)
@@ -141,6 +146,7 @@ function Menu.new()
     h = Config.menu.item_h,
     open_x = 0,
     hat_index = 1,
+    signal_nonce = os.time() * 1000 + math.random(0, 999),
   }
   resize(menu)
   return menu
@@ -185,6 +191,10 @@ function Menu.update(menu, pet, pet_module)
       menu.hat_index = current_hat_index(pet)
       place_in_top_safe_area(menu)
     elseif point_in_rect(mouse_x, mouse_y, item_rect(menu, labels, 2)) then
+      send_bridge_signal(menu, "open_mail")
+      Menu.hide(menu)
+    elseif point_in_rect(mouse_x, mouse_y, item_rect(menu, labels, 3)) then
+      send_bridge_signal(menu, "quit_teti")
       usagi.quit()
     end
     return true

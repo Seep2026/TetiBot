@@ -453,6 +453,25 @@ function Pet.current_hat(pet)
   return Config.hats.by_id and Config.hats.by_id[hat_state.currentHat]
 end
 
+function Pet.apply_status(pet, status)
+  if status == pet.external_status then
+    return
+  end
+  pet.external_status = status
+
+  if status == "received" or status == "communication_error" or status == "failed" then
+    set_expression(pet, "warning", 2.4, true)
+  elseif status == "accepted" or status == "in_progress" or status == "sent" then
+    set_expression(pet, "focused", 1.8, true)
+  elseif status == "rejected" then
+    set_expression(pet, "collapsed", 2.4, true)
+  elseif status == "done" then
+    set_expression(pet, "focused", 2.2, true)
+  elseif status == "draft" or status == "idle" then
+    set_expression(pet, "neutral", 0, true)
+  end
+end
+
 function Pet.set_window_position(pet, x, y)
   sync_window(pet, x, y)
 end

@@ -56,6 +56,10 @@ Config.drag = {
   settle_time = 0.3,
 }
 
+Config.interaction = {
+  screen_rect = { x = 28, y = 28, w = 72, h = 48 },
+}
+
 Config.animation = {
   idle_frame_time = 0.46,
   idle_fps = 2,
@@ -101,6 +105,7 @@ Config.menu = {
   label_utf8 = "\233\128\128\229\135\186",
   label = "Exit",
   hats_label = "Hats >",
+  mail_label = "Mail",
   item_h = 13,
   minimum_item_w = 15,
   picker_label_chars = 8,
